@@ -135,13 +135,28 @@ gui.Parent = game.CoreGui
               <p className="text-gray-400 mt-1">Build and preview your Roblox GUI visually</p>
             </div>
             <div className="flex gap-2">
-              <Button onClick={handleLoadExample} variant="outline" size="sm">
+              <Button 
+                onClick={handleLoadExample} 
+                variant="ghost" 
+                size="sm"
+                className="text-gray-300 hover:text-white hover:bg-gray-700 border border-gray-600 hover:border-gray-500 bg-gray-800"
+              >
                 Load Example
               </Button>
-              <Button onClick={handleCopyCode} variant="outline" size="sm">
+              <Button 
+                onClick={handleCopyCode} 
+                variant="ghost" 
+                size="sm"
+                className="text-gray-300 hover:text-white hover:bg-gray-700 border border-gray-600 hover:border-gray-500 bg-gray-800"
+              >
                 Copy Code
               </Button>
-              <Button onClick={handleClearCode} variant="outline" size="sm">
+              <Button 
+                onClick={handleClearCode} 
+                variant="ghost" 
+                size="sm"
+                className="text-gray-300 hover:text-white hover:bg-gray-700 border border-gray-600 hover:border-gray-500 bg-gray-800"
+              >
                 Clear All
               </Button>
             </div>
