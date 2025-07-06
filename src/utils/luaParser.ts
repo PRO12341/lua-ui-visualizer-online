@@ -2,8 +2,10 @@
 import { GuiElement, UDim2, Color3 } from '../types/GuiTypes';
 
 export class LuaParser {
+  private variables: Map<string, GuiElement> = new Map();
+
   private parseUDim2(text: string): UDim2 | null {
-    const match = text.match(/UDim2\.new\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/);
+    const match = text.match(/UDim2\.new\s*\(\s*([\d.]+)\s*,\s*([\d.-]+)\s*,\s*([\d.]+)\s*,\s*([\d.-]+)\s*\)/);
     if (match) {
       return {
         X: { Scale: parseFloat(match[1]), Offset: parseFloat(match[2]) },
@@ -36,111 +38,145 @@ export class LuaParser {
     return null;
   }
 
-  private extractProperty(code: string, propertyName: string): string | null {
-    const regex = new RegExp(`${propertyName}\\s*=\\s*([^\\n;]+)`, 'i');
-    const match = code.match(regex);
-    return match ? match[1].trim() : null;
-  }
-
-  private extractStringProperty(code: string, propertyName: string): string | null {
-    const property = this.extractProperty(code, propertyName);
-    if (property) {
-      const stringMatch = property.match(/["']([^"']*)["']/);
-      return stringMatch ? stringMatch[1] : null;
-    }
-    return null;
-  }
-
-  private extractNumberProperty(code: string, propertyName: string): number | null {
-    const property = this.extractProperty(code, propertyName);
-    if (property) {
-      const number = parseFloat(property);
-      return isNaN(number) ? null : number;
+  private parseVector2(text: string): { X: number; Y: number } | null {
+    const match = text.match(/Vector2\.new\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/);
+    if (match) {
+      return {
+        X: parseFloat(match[1]),
+        Y: parseFloat(match[2])
+      };
     }
     return null;
   }
 
   public parseLuaCode(code: string): GuiElement[] {
+    this.variables.clear();
     const elements: GuiElement[] = [];
     
-    // Split by common GUI element creation patterns
     const lines = code.split('\n');
-    let currentElement: Partial<GuiElement> | null = null;
+    let currentVariableName: string | null = null;
     
-    for (const line of lines) {
-      const trimmedLine = line.trim();
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
       
-      // Detect GUI element creation
-      if (trimmedLine.includes('Instance.new')) {
-        if (currentElement) {
-          elements.push(currentElement as GuiElement);
-        }
+      // Skip comments and empty lines
+      if (line.startsWith('--') || line === '') continue;
+      
+      // Detect variable creation with Instance.new
+      const instanceMatch = line.match(/local\s+(\w+)\s*=\s*Instance\.new\s*\(\s*["'](\w+)["']\s*\)/);
+      if (instanceMatch) {
+        const [, varName, elementType] = instanceMatch;
+        currentVariableName = varName;
         
-        const typeMatch = trimmedLine.match(/Instance\.new\s*\(\s*["'](\w+)["']/);
-        if (typeMatch) {
-          currentElement = {
-            Type: typeMatch[1] as GuiElement['Type'],
-            children: []
-          };
-        }
+        const element: GuiElement = {
+          Type: elementType as GuiElement['Type'],
+          Name: varName,
+          children: []
+        };
+        
+        this.variables.set(varName, element);
+        continue;
       }
       
-      // Parse properties
-      if (currentElement && trimmedLine.includes('=')) {
-        if (trimmedLine.includes('.Size')) {
-          const sizeMatch = trimmedLine.match(/UDim2\.new\s*\([^)]+\)/);
-          if (sizeMatch) {
-            currentElement.Size = this.parseUDim2(sizeMatch[0]);
+      // Parse property assignments
+      if (currentVariableName && line.includes('=')) {
+        const element = this.variables.get(currentVariableName);
+        if (!element) continue;
+        
+        // Size property
+        if (line.includes('.Size')) {
+          const udim2Match = line.match(/UDim2\.new\s*\([^)]+\)/);
+          if (udim2Match) {
+            element.Size = this.parseUDim2(udim2Match[0]);
           }
         }
         
-        if (trimmedLine.includes('.Position')) {
-          const positionMatch = trimmedLine.match(/UDim2\.new\s*\([^)]+\)/);
-          if (positionMatch) {
-            currentElement.Position = this.parseUDim2(positionMatch[0]);
+        // Position property
+        else if (line.includes('.Position')) {
+          const udim2Match = line.match(/UDim2\.new\s*\([^)]+\)/);
+          if (udim2Match) {
+            element.Position = this.parseUDim2(udim2Match[0]);
           }
         }
         
-        if (trimmedLine.includes('.BackgroundColor3')) {
-          const colorMatch = trimmedLine.match(/Color3\.(new|fromRGB)\s*\([^)]+\)/);
+        // BackgroundColor3 property
+        else if (line.includes('.BackgroundColor3')) {
+          const colorMatch = line.match(/Color3\.(new|fromRGB)\s*\([^)]+\)/);
           if (colorMatch) {
-            currentElement.BackgroundColor3 = this.parseColor3(colorMatch[0]);
+            element.BackgroundColor3 = this.parseColor3(colorMatch[0]);
           }
         }
         
-        if (trimmedLine.includes('.TextColor3')) {
-          const colorMatch = trimmedLine.match(/Color3\.(new|fromRGB)\s*\([^)]+\)/);
+        // TextColor3 property
+        else if (line.includes('.TextColor3')) {
+          const colorMatch = line.match(/Color3\.(new|fromRGB)\s*\([^)]+\)/);
           if (colorMatch) {
-            currentElement.TextColor3 = this.parseColor3(colorMatch[0]);
+            element.TextColor3 = this.parseColor3(colorMatch[0]);
           }
         }
         
-        if (trimmedLine.includes('.Text')) {
-          const textMatch = trimmedLine.match(/["']([^"']*)["']/);
+        // Text property
+        else if (line.includes('.Text')) {
+          const textMatch = line.match(/["']([^"']*)["']/);
           if (textMatch) {
-            currentElement.Text = textMatch[1];
+            element.Text = textMatch[1];
           }
         }
         
-        if (trimmedLine.includes('.TextSize')) {
-          const sizeMatch = trimmedLine.match(/=\s*(\d+)/);
+        // TextSize property
+        else if (line.includes('.TextSize')) {
+          const sizeMatch = line.match(/=\s*(\d+)/);
           if (sizeMatch) {
-            currentElement.TextSize = parseInt(sizeMatch[1]);
+            element.TextSize = parseInt(sizeMatch[1]);
           }
         }
         
-        if (trimmedLine.includes('.BorderSizePixel')) {
-          const borderMatch = trimmedLine.match(/=\s*(\d+)/);
+        // BorderSizePixel property
+        else if (line.includes('.BorderSizePixel')) {
+          const borderMatch = line.match(/=\s*(\d+)/);
           if (borderMatch) {
-            currentElement.BorderSizePixel = parseInt(borderMatch[1]);
+            element.BorderSizePixel = parseInt(borderMatch[1]);
+          }
+        }
+        
+        // BackgroundTransparency property
+        else if (line.includes('.BackgroundTransparency')) {
+          const transparencyMatch = line.match(/=\s*([\d.]+)/);
+          if (transparencyMatch && parseFloat(transparencyMatch[1]) === 1) {
+            element.BackgroundColor3 = { R: 0, G: 0, B: 0 };
+            // We'll handle transparency in the renderer
+          }
+        }
+        
+        // Image property
+        else if (line.includes('.Image')) {
+          const imageMatch = line.match(/["']([^"']*)["']/);
+          if (imageMatch) {
+            element.Image = imageMatch[1];
+          }
+        }
+        
+        // Parent property - this indicates the element should be added to elements array
+        else if (line.includes('.Parent')) {
+          const parentMatch = line.match(/\.Parent\s*=\s*(\w+)/);
+          if (parentMatch) {
+            const parentName = parentMatch[1];
+            
+            // If parent is 'gui' or 'frame', add to main elements
+            if (parentName === 'gui' || parentName === 'frame') {
+              elements.push(element);
+            }
+            // Reset current variable name after parent assignment
+            currentVariableName = null;
           }
         }
       }
-    }
-    
-    // Add the last element
-    if (currentElement) {
-      elements.push(currentElement as GuiElement);
+      
+      // If we encounter a new variable assignment, switch context
+      const newVarMatch = line.match(/^(\w+)\./);
+      if (newVarMatch && this.variables.has(newVarMatch[1])) {
+        currentVariableName = newVarMatch[1];
+      }
     }
     
     return elements;
