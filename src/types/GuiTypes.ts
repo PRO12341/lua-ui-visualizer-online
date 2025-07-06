@@ -11,7 +11,7 @@ export interface Color3 {
 }
 
 export interface GuiElement {
-  Type: 'Frame' | 'TextLabel' | 'TextButton' | 'ImageLabel' | 'ScrollingFrame';
+  Type: 'Frame' | 'TextLabel' | 'TextButton' | 'ImageLabel' | 'ImageButton' | 'ScrollingFrame';
   Name?: string;
   Size?: UDim2;
   Position?: UDim2;
