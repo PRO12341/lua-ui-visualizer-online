@@ -1,12 +1,34 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { GuiElement } from '../types/GuiTypes';
+import { PropertyEditor } from './PropertyEditor';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 
 interface UIPreviewProps {
   elements: GuiElement[];
+  selectedElement?: GuiElement | null;
+  onSelectElement?: (element: GuiElement | null) => void;
+  onUpdateElement?: (element: GuiElement) => void;
+  onCopyElement?: (element: GuiElement) => void;
 }
 
-export const UIPreview: React.FC<UIPreviewProps> = ({ elements }) => {
+export const UIPreview: React.FC<UIPreviewProps> = ({ 
+  elements, 
+  selectedElement, 
+  onSelectElement, 
+  onUpdateElement,
+  onCopyElement 
+}) => {
+  const [showPropertyEditor, setShowPropertyEditor] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isResizing, setIsResizing] = useState(false);
+
   const renderElement = (element: GuiElement, index: number) => {
     // Calculate position and size
     const xScale = element.Position?.X?.Scale || 0;
@@ -19,6 +41,8 @@ export const UIPreview: React.FC<UIPreviewProps> = ({ elements }) => {
     const heightScale = element.Size?.Y?.Scale || 0;
     const heightOffset = element.Size?.Y?.Offset || 30;
     
+    const isSelected = selectedElement === element;
+    
     const style: React.CSSProperties = {
       position: 'absolute',
       left: `calc(${xScale * 100}% + ${xOffset}px)`,
@@ -28,8 +52,8 @@ export const UIPreview: React.FC<UIPreviewProps> = ({ elements }) => {
       backgroundColor: element.BackgroundColor3 ? 
         `rgb(${Math.floor(element.BackgroundColor3.R * 255)}, ${Math.floor(element.BackgroundColor3.G * 255)}, ${Math.floor(element.BackgroundColor3.B * 255)})` : 
         'rgba(255, 255, 255, 0.1)',
-      border: element.BorderSizePixel ? `${element.BorderSizePixel}px solid #666` : 'none',
-      borderRadius: element.CornerRadius ? `${element.CornerRadius}px` : '0px',
+      border: isSelected ? '2px solid #3b82f6' : element.BorderSizePixel ? `${element.BorderSizePixel}px solid #666` : '1px solid rgba(255,255,255,0.1)',
+      borderRadius: element.CornerRadius ? `${element.CornerRadius}px` : '4px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: element.Type === 'TextLabel' ? 'flex-start' : 'center',
@@ -42,8 +66,10 @@ export const UIPreview: React.FC<UIPreviewProps> = ({ elements }) => {
       overflow: 'hidden',
       boxSizing: 'border-box',
       padding: '4px 8px',
-      cursor: element.Type === 'TextButton' || element.Type === 'ImageButton' ? 'pointer' : 'default',
+      cursor: isDragging ? 'grabbing' : 'grab',
       userSelect: 'none',
+      outline: isSelected ? '2px solid #3b82f6' : 'none',
+      outlineOffset: '2px'
     };
 
     // Handle text alignment for labels
@@ -74,43 +100,157 @@ export const UIPreview: React.FC<UIPreviewProps> = ({ elements }) => {
       }
     }
 
+    const handleMouseDown = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelectElement?.(element);
+      setIsDragging(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+    };
+
+    const handleDoubleClick = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelectElement?.(element);
+      setShowPropertyEditor(true);
+    };
+
     return (
-      <div 
-        key={`${element.Name}-${index}`} 
-        style={style} 
-        className={`gui-element ${element.Type === 'TextButton' ? 'hover:brightness-110' : ''}`}
-        title={element.Name}
-      >
-        {content}
-        {element.children && element.children.map((child, childIndex) => 
-          renderElement(child, childIndex)
-        )}
-      </div>
+      <ContextMenu key={`${element.Name}-${index}`}>
+        <ContextMenuTrigger>
+          <div 
+            style={style} 
+            className={`gui-element ${element.Type === 'TextButton' ? 'hover:brightness-110' : ''}`}
+            title={element.Name}
+            onMouseDown={handleMouseDown}
+            onDoubleClick={handleDoubleClick}
+          >
+            {content}
+            {element.children && element.children.map((child, childIndex) => 
+              renderElement(child, childIndex)
+            )}
+            
+            {/* Selection handles */}
+            {isSelected && (
+              <>
+                <div 
+                  className="absolute -top-1 -left-1 w-3 h-3 bg-blue-500 rounded-full cursor-nw-resize"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setIsResizing(true);
+                  }}
+                />
+                <div 
+                  className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full cursor-ne-resize"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setIsResizing(true);
+                  }}
+                />
+                <div 
+                  className="absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 rounded-full cursor-sw-resize"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setIsResizing(true);
+                  }}
+                />
+                <div 
+                  className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-full cursor-se-resize"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setIsResizing(true);
+                  }}
+                />
+              </>
+            )}
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => {
+            onSelectElement?.(element);
+            setShowPropertyEditor(true);
+          }}>
+            Edit Properties
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onCopyElement?.(element)}>
+            Copy Element
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => {
+            navigator.clipboard.writeText(JSON.stringify(element, null, 2));
+          }}>
+            Copy as JSON
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     );
   };
 
-  // Find the main frame to use as container
-  const mainFrame = elements.find(el => el.Name === 'frame' || el.Type === 'Frame');
-  const otherElements = elements.filter(el => el !== mainFrame);
+  // Handle mouse move for dragging
+  React.useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging && selectedElement && onUpdateElement) {
+        const deltaX = e.clientX - dragStart.x;
+        const deltaY = e.clientY - dragStart.y;
+        
+        const updatedElement = {
+          ...selectedElement,
+          Position: {
+            X: { 
+              Scale: selectedElement.Position?.X?.Scale || 0, 
+              Offset: (selectedElement.Position?.X?.Offset || 0) + deltaX 
+            },
+            Y: { 
+              Scale: selectedElement.Position?.Y?.Scale || 0, 
+              Offset: (selectedElement.Position?.Y?.Offset || 0) + deltaY 
+            }
+          }
+        };
+        
+        onUpdateElement(updatedElement);
+        setDragStart({ x: e.clientX, y: e.clientY });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setIsResizing(false);
+    };
+
+    if (isDragging || isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, isResizing, selectedElement, dragStart, onUpdateElement]);
 
   return (
-    <div className="h-full w-full bg-gray-900 relative overflow-hidden">
-      <div className="absolute inset-0" style={{ backgroundColor: '#2d2d2d' }}>
-        {/* Render main frame first if it exists */}
-        {mainFrame && renderElement(mainFrame, 0)}
-        
-        {/* Render other elements */}
-        {otherElements.map((element, index) => renderElement(element, index + 1))}
-      </div>
-      {elements.length === 0 && (
-        <div className="flex items-center justify-center h-full text-gray-400">
-          <div className="text-center">
-            <div className="text-2xl mb-2">🎮</div>
-            <p>Your Roblox UI will appear here</p>
-            <p className="text-sm mt-1">Paste your Lua GUI code to see the preview</p>
-          </div>
+    <>
+      <div className="h-full w-full bg-gray-900 relative overflow-hidden" onClick={() => onSelectElement?.(null)}>
+        <div className="absolute inset-0" style={{ backgroundColor: '#2d2d2d' }}>
+          {elements.map((element, index) => renderElement(element, index))}
         </div>
+        {elements.length === 0 && (
+          <div className="flex items-center justify-center h-full text-gray-400">
+            <div className="text-center">
+              <div className="text-2xl mb-2">🎮</div>
+              <p>Your Roblox UI will appear here</p>
+              <p className="text-sm mt-1">Use the toolbox above to add elements</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {showPropertyEditor && selectedElement && (
+        <PropertyEditor
+          element={selectedElement}
+          onUpdate={onUpdateElement!}
+          onClose={() => setShowPropertyEditor(false)}
+        />
       )}
-    </div>
+    </>
   );
 };
